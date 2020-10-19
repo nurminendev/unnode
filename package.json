@@ -1,6 +1,6 @@
 {
     "name": "unnode",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "A Node.js backend framework",
     "author": "Riku Nurminen",
     "license": "MIT",
