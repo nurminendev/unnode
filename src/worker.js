@@ -100,9 +100,11 @@ class UnnodeWorker {
             const routeModule   = route.controller.substr(0, route.controller.indexOf('#'))
             const routeHandler  = route.controller.substring(route.controller.lastIndexOf('#') + 1)
 
+            const routeCustomParameter = route.customParameter || null
+
             const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
 
-            this._serverApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject))
+            this._serverApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
 
             logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${routePath}, controller: ${route.controller}`)
         })
