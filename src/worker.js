@@ -51,6 +51,8 @@ class UnnodeWorker {
     _webpackDevMiddleware   = null
 
     _serverQuitting         = false
+    _shutdownCallback       = null
+
     _serverInsecure         = null
     _serverSecure           = null
     _httpTerminator         = null
@@ -75,6 +77,12 @@ class UnnodeWorker {
 
 
     getServerApp() { return this._serverApp }
+
+    registerShutdownCallback(shutdownCallback) {{
+        if(typeof shutdownCallback === 'function') {
+            this._shutdownCallback = shutdownCallback
+        }
+    }}
 
 
     async setupServer(serverDir) {
@@ -233,6 +241,10 @@ class UnnodeWorker {
 
             clearInterval(this._pingInterval)
 
+            if(this._shutdownCallback && typeof this._shutdownCallback === 'function') {
+                await this._shutdownCallback()
+            }
+    
             // Gracefully exit HTTP(S) connections
             if (this._httpTerminator !== null) {
                 logger.log('debug', 'Gracefully closing HTTP connections...')
