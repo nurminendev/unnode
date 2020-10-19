@@ -188,9 +188,9 @@ class UnnodeWorker {
     }
 
     async _startHttpSecureServer(listenHost, portSSL, sslPrivKey, sslCert, sslCA) {
-        const sslPrivKeyData = await util.readFile(sslPrivKey)
-        const sslCertData = await util.readFile(sslCert)
-        const sslCAdata = await util.readFile(sslCA)
+        const sslPrivKeyData = await utils.readFile(sslPrivKey)
+        const sslCertData = await utils.readFile(sslCert)
+        const sslCAdata = await utils.readFile(sslCA)
 
         return new Promise((resolve, reject) => {
             if(sslPrivKeyData === false) {
