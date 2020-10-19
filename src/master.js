@@ -201,14 +201,16 @@ class UnnodeMaster {
                 }
 
                 if(webpackConfigFullPath === null) {
-                    resolve(true)
+                    return resolve(true)
+                }
+
+                const isWebpackConfigReadable = utils.isFileReadableSync(webpackConfigFullPath)
+        
+                if(webpackConfigFullPath !== null && isWebpackConfigReadable === false) {
+                    return reject(new Error(`APP_WEBPACK_DEV_CONFIG is not readable: ${webpackConfigFullPath}`))
                 }
         
-                if(webpackConfigFullPath !== null && utils.isFileReadableSync(webpackConfigFullPath) === false) {
-                    reject(new Error(`APP_WEBPACK_DEV_CONFIG is not readable: ${webpackConfigFullPath}`))
-                }
-        
-                if(utils.isFileReadableSync(webpackConfigFullPath)) {
+                if(isWebpackConfigReadable === true) {
                     const webpack               = require('webpack')
                     const webpackDevMiddleware  = require('webpack-dev-middleware')
                     const webpackConfig         = require(webpackConfigFullPath)
