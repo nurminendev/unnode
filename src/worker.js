@@ -273,7 +273,8 @@ class UnnodeWorker {
                https://nodejs.org/api/http.html#http_event_clienterror
             */
             if (err.code === 'ECONNRESET' || !socket.writable) {
-                throw new Error('ECONNRESET or socket not writable')
+                logger.log('warning', `HTTP clientError: ${err.code} (socket already destroyed)`, 'no-rollbar')
+                return
             }
 
             const ip = socket.remoteAddress
@@ -289,7 +290,7 @@ class UnnodeWorker {
             response += '\r\n'
             response += errorBody
 
-            logger.log('warning', `HTTP clientError: ${err.code}, remoteAddress: ${ip}`)
+            logger.log('warning', `HTTP clientError: ${err.code}, remoteAddress: ${ip}`, 'no-rollbar')
 
             socket.write(
                 response,
@@ -299,8 +300,10 @@ class UnnodeWorker {
         }
     
         catch(fatalErr) {
-            logger.log('error', `_handleHttpClientError(): ${fatalErr}`)
-            socket.end()
+            logger.safeError('error', '_handleHttpClientError()', fatalErr)
+            if(socket.writable) {
+                socket.end()
+            }
         }
     }
 
