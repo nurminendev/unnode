@@ -1,6 +1,6 @@
 //
 //
-// Unnode.js - A Node.js backend framework
+// Unnode.js - A Node.js back end framework
 //
 // https://www.unnodejs.org
 //
@@ -33,7 +33,6 @@
 const fs                = require('fs')
 const R                 = require('ramda')
 const iso               = require('iso-3166-1')
-const date              = require('date-and-time')
 const node_fetch        = require('node-fetch')
 const AbortController   = require('abort-controller')
 const requestIp         = require('request-ip')
@@ -87,12 +86,21 @@ function readFile(file, encoding = 'utf8') {
     return new Promise((resolve, reject) => {
         fs.readFile(file, encoding, (err, data) => {
             if(err) {
-                resolve(false)
+                resolve(null)
             } else {
                 resolve(data)
             }
         })
     })
+}
+
+
+function readFileSync(file, encoding = 'utf8') {
+    try {
+        return fs.readFileSync(file, encoding)
+    } catch(_) {
+        return null
+    }
 }
 
 
@@ -142,35 +150,6 @@ function convertCountryCodeAlpha2toAlpha3(countryCodeAlpha2) {
     return null
 }
 
-
-/*
- * Get a timestamp in ISO 8601 format.
- *
- * 'time' can be a string accepted by javascript Date() object constructor.
- * 
- * If 'time' is null, will return current time in ISO 8601 format.
- * 
- * excludeMS: Either include or exclude milliseconds in the returned timestamp.
- * 
- * Example return values:
- * 
- * With milliseconds: 2020-07-15T15:14:36.579+03:00
- * Without milliseconds: 2020-07-15T15:14:36+03:00
- *
- */
-function getTimestamp(time, excludeMS) {
-    let now = new Date()
-    if(time) {
-        now = new Date(time)
-    }
-    let zone = date.format(now, 'Z')
-    zone = zone.slice(0, 3) + ':' + zone.slice(3)
-    if(excludeMS) {
-        return date.format(now, 'YYYY-MM-DD[T]HH:mm:ss') + zone
-    } else {
-        return date.format(now, 'YYYY-MM-DD[T]HH:mm:ss.SSS') + zone
-    }
-}
 
 
 /*
@@ -241,12 +220,12 @@ module.exports = {
     isFileReadable: isFileReadable,
     isFileReadableSync: isFileReadableSync,
     readFile: readFile,
+    readFileSync: readFileSync,
     getDirectories: getDirectories,
     _v: _v,
     parseJson: parseJson,
     convertCountryCodeAlpha2toAlpha3: convertCountryCodeAlpha2toAlpha3,
     convertCountryCodeAlpha3toAlpha2: convertCountryCodeAlpha3toAlpha2,
-    getTimestamp: getTimestamp,
     fetch: fetch,
     safeError: safeError,
     getClientIp: getClientIp

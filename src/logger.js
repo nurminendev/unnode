@@ -1,6 +1,6 @@
 //
 //
-// Unnode.js - A Node.js backend framework
+// Unnode.js - A Node.js back end framework
 //
 // https://www.unnodejs.org
 //
@@ -72,7 +72,7 @@ class MasterLogger {
     constructor() {
         // Timestamper with timezones
         this._timestampFunc = winston.format((info) => {
-            const appTimezone = process.env.APP_TIMEZONE
+            const appTimezone = process.env.UNNODE_TIMEZONE
             const supportedTimezones = moment.tz.names()
 
             if(appTimezone && supportedTimezones.includes(appTimezone)) {
@@ -92,8 +92,8 @@ class MasterLogger {
         }
 
         // File logging with logrotate
-        if(process.env.APP_LOGFILE) {
-            this._setupFileLogging(serverDir, process.env.APP_LOGFILE)
+        if(process.env.UNNODE_LOGFILE) {
+            this._setupFileLogging(serverDir, process.env.UNNODE_LOGFILE)
         }
 
         // Console logging
@@ -188,8 +188,8 @@ class MasterLogger {
             return info
         })
 
-        const logFileRotate = `${logFile}-%DATE%.log`
-        const symlinkFile   = `${logFile}.log`
+        const logFileRotate = `${logFile}-%DATE%`
+        const symlinkFile   = logFile
 
         const fileRotateTransport = new (winston.transports.DailyRotateFile)({
             level: 'debug',

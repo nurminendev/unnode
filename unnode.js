@@ -1,6 +1,6 @@
 //
 //
-// Unnode.js - A Node.js backend framework
+// Unnode.js - A Node.js back end framework
 //
 // https://www.unnodejs.org
 //

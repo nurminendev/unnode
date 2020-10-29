@@ -1,6 +1,6 @@
 //
 //
-// Unnode.js - A Node.js backend framework
+// Unnode.js - A Node.js back end framework
 //
 // https://www.unnodejs.org
 //
@@ -53,9 +53,9 @@ class UnnodeMaster {
         masterLogger.init(serverDir)
 
         const cpuCount = require('os').cpus().length
-        let workers = process.env.APP_WORKERS
+        let workers = process.env.UNNODE_WORKERS
 
-        // APP_WORKERS must be >=1 and <= CPU count, else default to CPU count
+        // UNNODE_WORKERS must be >=1 and <= CPU count, else default to CPU count
         if (isNaN(workers) || workers < 1 || workers > cpuCount) {
             workers = cpuCount
         }
@@ -193,7 +193,7 @@ class UnnodeMaster {
     _startWebpackWatcher(serverDir) {
         return new Promise((resolve, reject) => {
             if(process.env.NODE_ENV !== 'production') {
-                const webpackConfigPath     = process.env.APP_WEBPACK_DEV_CONFIG
+                const webpackConfigPath     = process.env.UNNODE_WEBPACK_DEV_CONFIG
                 let webpackConfigFullPath   = null
         
                 if(typeof webpackConfigPath === 'string' && webpackConfigPath.length > 0) {
@@ -207,7 +207,7 @@ class UnnodeMaster {
                 const isWebpackConfigReadable = utils.isFileReadableSync(webpackConfigFullPath)
         
                 if(webpackConfigFullPath !== null && isWebpackConfigReadable === false) {
-                    return reject(new Error(`APP_WEBPACK_DEV_CONFIG is not readable: ${webpackConfigFullPath}`))
+                    return reject(new Error(`UNNODE_WEBPACK_DEV_CONFIG is not readable: ${webpackConfigFullPath}`))
                 }
         
                 if(isWebpackConfigReadable === true) {

@@ -1,6 +1,6 @@
 //
 //
-// Unnode.js - A Node.js backend framework
+// Unnode.js - A Node.js back end framework
 //
 // https://www.unnodejs.org
 //
@@ -33,6 +33,7 @@
 'use strict'
 
 const path              = require('path')
+const tls               = require('tls')
 const http              = require('http')
 const https             = require('https')
 const httpTerminator    = require('http-terminator')
@@ -42,7 +43,7 @@ const chalk             = require('chalk')
 
 const logger            = require('./logger.js').workerLogger
 const utils             = require('./utils.js')
-
+const { handle }        = require('./utils.js')
 
 class UnnodeWorker {
     _serverApp              = null
@@ -134,21 +135,18 @@ class UnnodeWorker {
 
     async runServer() {
         // Default to listening on all interfaces if not set in ENV
-        const listenHost = process.env.SERVER_LISTEN_HOST || '0.0.0.0'
-
-        const portInsecure = process.env.SERVER_LISTEN_PORT_INSECURE
+        const listenHost    = process.env.UNNODE_SERVER_LISTEN_HOST || '0.0.0.0'
+        const portInsecure  = process.env.UNNODE_SERVER_INSECURE_PORT
+        const portSecure    = process.env.UNNODE_SERVER_SECURE_PORT
 
         if(portInsecure && !isNaN(portInsecure)) {
             await this._startHttpServer(listenHost, portInsecure)
+        } else {
+            logger.log('debug', 'UNNODE_SERVER_INSECURE_PORT not set or not a valid port number, skipping nonsecure HTTP server start.')
         }
 
-        const portSSL    = process.env.SERVER_LISTEN_PORT_SSL
-        const sslPrivKey = process.env.SERVER_SSL_PRIVKEY
-        const sslCert    = process.env.SERVER_SSL_CERT
-        const sslCA      = process.env.SERVER_SSL_CA
-
-        if(portSSL && !isNaN(portSSL) && sslPrivKey && sslCert && sslCA) {
-            await this._startHttpSecureServer(listenHost, portSSL, sslPrivKey, sslCert, sslCA)
+        if(portSecure && !isNaN(portSecure)) {
+            await this._startHttpSecureServer(listenHost, portSecure)
         }
 
         if(this._serverInsecure === null && this._serverSecure === null) {
@@ -160,7 +158,7 @@ class UnnodeWorker {
             'type': 'serverRunning',
             'listen_host': listenHost,
             'listen_port_insecure': (this._serverInsecure !== null) ? portInsecure : null,
-            'listen_port_secure': (this._serverSecure !== null) ? portSSL : null
+            'listen_port_secure': (this._serverSecure !== null) ? portSecure : null
         })
 
         return true
@@ -187,53 +185,145 @@ class UnnodeWorker {
         })
     }
 
-    async _startHttpSecureServer(listenHost, portSSL, sslPrivKey, sslCert, sslCA) {
-        const sslPrivKeyData = await utils.readFile(sslPrivKey)
-        const sslCertData = await utils.readFile(sslCert)
-        const sslCAdata = await utils.readFile(sslCA)
+    async _startHttpSecureServer(listenHost, portSecure) {
+        const tlsDefaultKeyData     = utils.readFileSync(process.env.UNNODE_SERVER_SECURE_DEFAULT_KEY)
+        const tlsDefaultCertData    = utils.readFileSync(process.env.UNNODE_SERVER_SECURE_DEFAULT_CERT)
+        const tlsDefaultCAdata      = utils.readFileSync(process.env.UNNODE_SERVER_SECURE_DEFAULT_CA)
 
         return new Promise((resolve, reject) => {
-            if(sslPrivKeyData === false) {
-                logger.log('alert', `Unable to read SSL cert from SERVER_SSL_PRIVKEY; cannot start HTTPS server.`)
+            let error = false
+
+            if(tlsDefaultKeyData === null) {
+                logger.log('alert', `Unable to read TLS key from UNNODE_SERVER_SECURE_DEFAULT_KEY; cannot start HTTPS server.`)
+                error = true
             }
-            if(sslCertData === false) {
-                logger.log('alert', `Unable to read SSL cert from SERVER_SSL_CERT; cannot start HTTPS server.`)
+            if(tlsDefaultCertData === null) {
+                logger.log('alert', `Unable to read TLS cert from UNNODE_SERVER_SECURE_DEFAULT_CERT; cannot start HTTPS server.`)
+                error = true
             }
-            if(sslCAdata === false) {
-                logger.log('alert', `Unable to read SSL cert from SERVER_SSL_CA; cannot start HTTPS server.`)
+            if(process.env.UNNODE_SERVER_SECURE_DEFAULT_CA && tlsDefaultCertData === null) {
+                logger.log('alert', `Unable to read trusted CA certs from UNNODE_SERVER_SECURE_DEFAULT_CA; cannot start HTTPS server.`)
+                error = true
+            }
+
+            if(error) {
+                return reject()
             }
     
-            if(sslPrivKeyData !== false && sslCertData !== false && sslCAdata !== false) {
-                let credentials = {
-                    key: sslPrivKeyData,
-                    cert: sslCertData,
-                    ca: sslCAdata
+            let options = {
+                key: tlsDefaultKeyData,
+                cert: tlsDefaultCertData,
+            }
+
+            if (tlsDefaultCAdata !== null) {
+                options['ca'] = tlsDefaultCAdata
+            }
+
+            if (process.env.UNNODE_SERVER_SECURE_MINVERSION) {
+                options['minVersion'] = process.env.UNNODE_SERVER_SECURE_MINVERSION
+            }
+
+            // Get vhosts secure contexts
+            const secureContexts = this._getSecureContexts()
+
+            if(Object.keys(secureContexts).length > 0) {
+                options['SNICallback'] = (domain, cb) => {
+                    if(secureContexts[domain]) {
+                        cb(null, secureContexts[domain])
+                    } else {
+                        cb()
+                    }
                 }
-    
-                if(process.env.SERVER_SSL_MINVERSION) {
-                    credentials['minVersion'] = process.env.SERVER_SSL_MINVERSION
-                }
-    
-                this._serverSecure = https.createServer(credentials, this._serverApp)
-    
-                this._serverSecure.on('error', this._handleHttpServerError.bind(this))
-                this._serverSecure.on('clientError', this._handleHttpClientError.bind(this))
-    
-                this._serverSecure.on('close', () => {
-                    logger.log('debug', chalk.bgBlue('[Express] HTTPS Server closed'))
-                })
-    
-                this._serverSecure.listen(portSSL, listenHost, () => {
-                    // Create terminator only after Express is listening for connections
-                    this._httpsTerminator = httpTerminator.createHttpTerminator({
-                        server: this._serverSecure,
-                        gracefulTerminationTimeout: 5000
-                    })
-                    logger.log('debug', chalk.bgBlue(`[Express] Server listening on ${listenHost}:${portSSL} (HTTPS)`))
-                    resolve()
-                })
             }
+
+            this._serverSecure = https.createServer(options, this._serverApp)
+
+            this._serverSecure.on('error', this._handleHttpServerError.bind(this))
+            this._serverSecure.on('clientError', this._handleHttpClientError.bind(this))
+
+            this._serverSecure.on('close', () => {
+                logger.log('debug', chalk.bgBlue('[Express] HTTPS Server closed'))
+            })
+
+            this._serverSecure.listen(portSecure, listenHost, () => {
+                // Create terminator only after Express is listening for connections
+                this._httpsTerminator = httpTerminator.createHttpTerminator({
+                    server: this._serverSecure,
+                    gracefulTerminationTimeout: 5000
+                })
+                logger.log('debug', chalk.bgBlue(`[Express] Server listening on ${listenHost}:${portSecure} (HTTPS)`))
+                resolve()
+            })
         })
+    }
+
+
+    _getSecureContexts() {
+        const secureContextsFile = process.env.UNNODE_SERVER_SECURE_CONTEXTS
+
+        let secureContexts = {}
+
+        if(secureContextsFile) {
+            try {
+                const secureContextsConf = require(secureContextsFile)
+
+                if(!Array.isArray(secureContextsConf)) {
+                    throw new Error(`UNNODE_SERVER_SECURE_CONTEXTS file did not export an array`)
+                }
+
+                secureContextsConf.map((context, idx) => {
+                    if(!utils.isObject(context)) {
+                        logger.log('error', `Secure context at index ${idx} not an object, skipping.`)
+                        return
+                    }
+
+                    if(!context.hostname) {
+                        logger.log('error', `Secure context at index ${idx} is missing "hostname" property, skipping.`)
+                        return
+                    }
+
+                    if(typeof context.hostname !== 'string') {
+                        logger.log('error', `Secure context at index ${idx} has a non-string "hostname" property, skipping.`)
+                        return
+                    }
+
+                    if(context.hostname.length === 0) {
+                        logger.log('error', `Secure context at index ${idx} has an empty "hostname" property, skipping.`)
+                        return
+                    }
+
+                    if(!context.credentials || !utils.isObject(context.credentials)) {
+                        logger.log('error', `Secure context at index ${idx} is missing or has a non-object "credentials" property, skipping.`)
+                        return
+                    }
+
+                    const contextKey    = utils.readFileSync(context.credentials.key)
+                    const contextCert   = utils.readFileSync(context.credentials.cert)
+                    const contextCA     = utils.readFileSync(context.credentials.ca)
+
+                    if(contextKey === null) {
+                        logger.log('error', `Unable to read secure context keyfile at index ${idx} (${context.hostname}), skipping.`)
+                        return
+                    }
+
+                    if(contextCert === null) {
+                        logger.log('error', `Unable to read secure context certfile at index ${idx} (${context.hostname}), skipping.`)
+                        return
+                    }
+
+                    secureContexts[context.hostname] = tls.createSecureContext({
+                        key: contextKey,
+                        cert: contextCert,
+                        ca: contextCA
+                    });
+                })
+            } catch(error) {
+                logger.safeError('error', 'HTTPS server secure contexts setup', error)
+                throw new Error(`HTTPS server secure contexts setup failed.`)
+            }
+        }
+
+        return secureContexts
     }
 
 
