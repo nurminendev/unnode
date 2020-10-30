@@ -214,6 +214,12 @@ function getClientIp(req) {
 }
 
 
+function getRequestFullUrl(req) {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol
+    return protocol + '://' + req.get('host') + req.originalUrl
+}
+
+
 module.exports = {
     handle: handle,
     isObject: isObject,
@@ -228,5 +234,6 @@ module.exports = {
     convertCountryCodeAlpha3toAlpha2: convertCountryCodeAlpha3toAlpha2,
     fetch: fetch,
     safeError: safeError,
-    getClientIp: getClientIp
+    getClientIp: getClientIp,
+    getRequestFullUrl: getRequestFullUrl
 }

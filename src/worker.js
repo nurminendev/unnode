@@ -45,6 +45,9 @@ const logger            = require('./logger.js').workerLogger
 const utils             = require('./utils.js')
 const { handle }        = require('./utils.js')
 
+const vhosts            = require('../backends/express-vhost.js')
+
+
 class UnnodeWorker {
     _serverApp              = null
 
@@ -92,9 +95,50 @@ class UnnodeWorker {
         // Helmet on, for safety.
         this._serverApp.use(helmet())
 
-        // Routes from config/routes.js
-        const routes = require(path.join(serverDir, 'config', 'routes.js'))
+        this._serverApp.use(vhosts.vhost())
 
+        // Routes from config/routes.js
+        const vhostsConf = require(path.join(serverDir, 'config', 'routes.js'))
+
+        vhostsConf.forEach((vhost) => {
+            const routeVhost    = vhost.vhost
+
+            if(routeVhost === '*') {
+                return
+            }
+
+            const routes        = vhost.routes
+
+            const vhostApp = express()
+            //vhostApp.use(helmet())
+
+            routes.forEach((route) => {
+                const routeMethod   = route.method
+                const routePath     = route.path
+                const routeModule   = route.controller.substr(0, route.controller.indexOf('#'))
+                const routeHandler  = route.controller.substring(route.controller.lastIndexOf('#') + 1)
+    
+                const routeCustomParameter = route.customParameter || null
+    
+                const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
+    
+                vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+    
+                logger.log('debug', `UnnodeWorker#setupServer: Added ${routeVhost} ${routeMethod} ${routePath}, controller: ${route.controller}`)
+            })
+
+            vhosts.register(routeVhost, vhostApp)
+        })
+
+        const wildcardVhost = vhostsConf.filter((vhost) => {
+            if(vhost.vhost === '*') {
+                return true
+            }
+
+            return false
+        })
+
+        const routes = wildcardVhost[0].routes
         routes.forEach((route) => {
             const routeMethod   = route.method
             const routePath     = route.path
@@ -118,15 +162,23 @@ class UnnodeWorker {
     }
 
 
+    getWebBackend(host) {
+        return vhosts.getApp(host)
+    }
+
+
     addWildcardRoute() {
         // Default endpoint for everything else
         this._serverApp.use((req, res) => {
             const ip     = utils.getClientIp(req)
             const method = req.method
-            const url    = req.originalUrl
+            const url    = utils.getRequestFullUrl(req)
             const agent  = req.get('user-agent')
+
             logger.log('notice', `Wildcard request ${method} ${url} (from: ${ip}, User-Agent: ${agent})`, 'no-rollbar')
-            res.status(404).send('404 Not Found')
+
+            // Set shortcut icon to empty so browsers stop requesting it
+            res.status(404).send('<html><head><title>404 Not Found</title><link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon"></head><body><h1>404 Not Found</h1></body></html>')
         })
 
         logger.log('debug', `UnnodeWorker#addWildCardRoute: Added wildcard route handler (404 reply + request logging)`)
