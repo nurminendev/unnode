@@ -37,7 +37,8 @@
         "url": "git+https://github.com/ricforge/unnode.git"
     },
     "files": [
-        "src/**/*.js"
+        "src/**/*.js",
+        "backends/**/*.js"
     ],
     "keywords": [
         "javascript",
