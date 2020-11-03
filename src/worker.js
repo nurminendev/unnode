@@ -38,7 +38,6 @@ const http              = require('http')
 const https             = require('https')
 const httpTerminator    = require('http-terminator')
 const express           = require('express')
-const connect           = require('connect')
 const helmet            = require('helmet')
 const chalk             = require('chalk')
 
@@ -97,11 +96,11 @@ class UnnodeWorker {
 
         this._serverApp.use(vhostRouter.middleware())
 
-        // Parse server config, vhosts, routes etc
         const defaultConfigPath = path.join(serverDir, 'config', 'unnode-server-config.js')
 
         const configPath = process.env.UNNODE_SERVER_CONFIG || defaultConfigPath
 
+        // Parse server config, vhosts, routes etc
         this._serverConfig = this._parseServerConfig(configPath)
 
         this._serverConfig.forEach((config) => {
