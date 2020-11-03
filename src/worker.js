@@ -38,6 +38,7 @@ const http              = require('http')
 const https             = require('https')
 const httpTerminator    = require('http-terminator')
 const express           = require('express')
+const connect           = require('connect')
 const helmet            = require('helmet')
 const chalk             = require('chalk')
 
@@ -45,10 +46,12 @@ const logger            = require('./logger.js').workerLogger
 const utils             = require('./utils.js')
 const { handle }        = require('./utils.js')
 
-const vhosts            = require('../backends/express-vhost.js')
+const vhostRouter       = require('../backends/express-vhost-router.js')
 
 
 class UnnodeWorker {
+    _serverConfig           = null
+
     _serverApp              = null
 
     _webpackCompiler        = null
@@ -66,7 +69,7 @@ class UnnodeWorker {
 
 
     constructor() {
-        process.title = 'unnode-worker'
+        process.title = `unnode-worker (pid: ${process.pid})`
 
         process.on('SIGTERM', () => { })
         process.on('SIGINT', () => { })
@@ -92,53 +95,44 @@ class UnnodeWorker {
     async setupServer(serverDir) {
         this._serverApp = express()
 
-        // Helmet on, for safety.
-        this._serverApp.use(helmet())
+        this._serverApp.use(vhostRouter.middleware())
 
-        this._serverApp.use(vhosts.vhost())
+        // Parse server config, vhosts, routes etc
+        const defaultConfigPath = path.join(serverDir, 'config', 'unnode-server-config.js')
 
-        // Routes from config/routes.js
-        const vhostsConf = require(path.join(serverDir, 'config', 'routes.js'))
+        const configPath = process.env.UNNODE_SERVER_CONFIG || defaultConfigPath
 
-        vhostsConf.forEach((vhost) => {
-            const routeVhost    = vhost.vhost
+        this._serverConfig = this._parseServerConfig(configPath)
 
-            if(routeVhost === '*') {
-                return
-            }
-
-            const routes        = vhost.routes
-
-            const vhostApp = express()
-            //vhostApp.use(helmet())
-
-            routes.forEach((route) => {
-                const routeMethod   = route.method
-                const routePath     = route.path
-                const routeModule   = route.controller.substr(0, route.controller.indexOf('#'))
-                const routeHandler  = route.controller.substring(route.controller.lastIndexOf('#') + 1)
-    
-                const routeCustomParameter = route.customParameter || null
-    
-                const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
-    
-                vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
-    
-                logger.log('debug', `UnnodeWorker#setupServer: Added ${routeVhost} ${routeMethod} ${routePath}, controller: ${route.controller}`)
-            })
-
-            vhosts.register(routeVhost, vhostApp)
+        this._serverConfig.forEach((config) => {
+            this._setupServerVhost(config, serverDir)
         })
 
-        const wildcardVhost = vhostsConf.filter((vhost) => {
-            if(vhost.vhost === '*') {
-                return true
-            }
+        this._pingInterval = setInterval(() => {
+            process.send({ 'type': 'pingConsole' })
+        }, 60000)
 
-            return false
-        })
+        return true
+    }
 
-        const routes = wildcardVhost[0].routes
+
+    _setupServerVhost(config, serverDir) {
+        const vhosts = config.vhost
+        const routes = config.routes
+
+        let isCatchAllVhost = false
+
+        if(vhosts.length === 1 && vhosts[0] === '*') {
+            isCatchAllVhost = true
+        }
+
+        let vhostApp = null
+
+        if(!isCatchAllVhost) {
+            vhostApp = express()
+            vhostApp.use(helmet())
+        }
+
         routes.forEach((route) => {
             const routeMethod   = route.method
             const routePath     = route.path
@@ -149,16 +143,20 @@ class UnnodeWorker {
 
             const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
 
-            this._serverApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+            if(isCatchAllVhost) {
+                this._serverApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+            } else {
+                vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+            }
 
-            logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${routePath}, controller: ${route.controller}`)
+            logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${vhosts.join(',')} ${routePath}, controller: ${route.controller}`)
         })
 
-        this._pingInterval = setInterval(() => {
-            process.send({ 'type': 'pingConsole' })
-        }, 60000)
-
-        return true
+        if(!isCatchAllVhost) {
+            vhosts.map((vhost) => {{
+                vhostRouter.register(vhost, vhostApp)
+            }})
+        }
     }
 
 
@@ -275,18 +273,28 @@ class UnnodeWorker {
                 options['minVersion'] = process.env.UNNODE_SERVER_SECURE_MINVERSION
             }
 
-            // Get vhosts secure contexts
-            const secureContexts = this._getSecureContexts()
 
-            if(Object.keys(secureContexts).length > 0) {
-                options['SNICallback'] = (domain, cb) => {
-                    if(secureContexts[domain]) {
-                        cb(null, secureContexts[domain])
-                    } else {
-                        cb()
+            //
+            // Setup SNI callback for vhost specific certificates
+            //
+            options['SNICallback'] = (domain, cb) => {
+                const vhostConfig = this._serverConfig.filter((config) => {
+                    const wildcardDomain = '*' + domain.substr(domain.indexOf('.'))
+
+                    if(config.vhost.includes(domain) || config.vhost.includes(wildcardDomain)) {
+                        return true
                     }
+
+                    return false
+                })
+
+                if(vhostConfig.length === 1) {
+                    cb(null, vhostConfig[0].secureContext)
+                } else {
+                    cb()
                 }
             }
+
 
             this._serverSecure = https.createServer(options, this._serverApp)
 
@@ -301,81 +309,106 @@ class UnnodeWorker {
                 // Create terminator only after Express is listening for connections
                 this._httpsTerminator = httpTerminator.createHttpTerminator({
                     server: this._serverSecure,
+
+                    // This should be lower than the force-KILL timeout in master.js
                     gracefulTerminationTimeout: 5000
                 })
+
                 logger.log('debug', chalk.bgBlue(`[Express] Server listening on ${listenHost}:${portSecure} (HTTPS)`))
+
                 resolve()
             })
         })
     }
 
 
-    _getSecureContexts() {
-        const secureContextsFile = process.env.UNNODE_SERVER_SECURE_CONTEXTS
+    _parseServerConfig(configFilePath) {
+        try {
+            const serverConfig = require(configFilePath)
 
-        let secureContexts = {}
+            if(!Array.isArray(serverConfig)) {
+                throw new Error(`Unnode.js server config file did not export an array`)
+            }
 
-        if(secureContextsFile) {
-            try {
-                const secureContextsConf = require(secureContextsFile)
+            serverConfig.map((config, idx) => {
+                return this._parseConfigEntry(config, idx)
+            })
 
-                if(!Array.isArray(secureContextsConf)) {
-                    throw new Error(`UNNODE_SERVER_SECURE_CONTEXTS file did not export an array`)
+            return serverConfig
+        } catch (error) {
+            throw error
+        }
+    }
+
+
+    _parseConfigEntry(config, idx) {
+        let configErrors = false
+
+        if(!utils.isObject(config)) {
+            throw new Error(`Unnode.js server config entry at index ${idx} is not an object`)
+        }
+
+        if(!Object.keys(config).includes('vhost')) {
+            throw new Error(`Unnode.js server config entry at index ${idx}: missing "vhost" property`)
+        }
+
+        if(!Array.isArray(config.vhost)) {
+            throw new Error(`Unnode.js server config entry at index ${idx}: "vhost" must be an array`)
+        }
+
+        config.vhost.map((vhost, idx2) => {
+            if(typeof vhost !== 'string') {
+                throw new Error(`Unnode.js server config entry at index ${idx}: vhost at idx ${idx2} is not a string`)
+            }
+
+            if(vhost.length === 0) {
+                throw new Error(`Unnode.js server config entry at index ${idx}: vhost at idx ${idx2} is empty`)
+            }
+        })
+
+        let secureServer = false
+        const portSecure = process.env.UNNODE_SERVER_SECURE_PORT
+
+        if(portSecure && !isNaN(portSecure)) {
+            secureServer = true
+        }
+
+        if(secureServer) {
+            if(config.secureContext && utils.isObject(config.secureContext)) {
+                const contextKey  = utils.readFileSync(config.secureContext.key)
+                const contextCert = utils.readFileSync(config.secureContext.cert)
+                const contextCA   = utils.readFileSync(config.secureContext.ca)
+
+                if(contextKey === null) {
+                    throw new Error(`Unable to read secure context keyfile at index ${idx} (${config.vhost.join(', ')})`)
                 }
 
-                secureContextsConf.map((context, idx) => {
-                    if(!utils.isObject(context)) {
-                        logger.log('error', `Secure context at index ${idx} not an object, skipping.`)
-                        return
-                    }
+                if(contextCert === null) {
+                    throw new Error(`Unable to read secure context certfile at index ${idx} (${config.vhost.join(', ')})`)
+                }
 
-                    if(!context.hostname) {
-                        logger.log('error', `Secure context at index ${idx} is missing "hostname" property, skipping.`)
-                        return
-                    }
+                let secureContext = {
+                    key: contextKey,
+                    cert: contextCert
+                }
 
-                    if(typeof context.hostname !== 'string') {
-                        logger.log('error', `Secure context at index ${idx} has a non-string "hostname" property, skipping.`)
-                        return
-                    }
+                if(config.secureContext.ca && contextCA === null) {
+                    throw new Error(`Unable to read secure context CA file at index ${idx} (${config.vhost.join(', ')})`)
+                } else if(config.secureContext.ca && contextCA !== null) {
+                    secureContext['ca'] = contextCA
+                }
 
-                    if(context.hostname.length === 0) {
-                        logger.log('error', `Secure context at index ${idx} has an empty "hostname" property, skipping.`)
-                        return
-                    }
-
-                    if(!context.credentials || !utils.isObject(context.credentials)) {
-                        logger.log('error', `Secure context at index ${idx} is missing or has a non-object "credentials" property, skipping.`)
-                        return
-                    }
-
-                    const contextKey    = utils.readFileSync(context.credentials.key)
-                    const contextCert   = utils.readFileSync(context.credentials.cert)
-                    const contextCA     = utils.readFileSync(context.credentials.ca)
-
-                    if(contextKey === null) {
-                        logger.log('error', `Unable to read secure context keyfile at index ${idx} (${context.hostname}), skipping.`)
-                        return
-                    }
-
-                    if(contextCert === null) {
-                        logger.log('error', `Unable to read secure context certfile at index ${idx} (${context.hostname}), skipping.`)
-                        return
-                    }
-
-                    secureContexts[context.hostname] = tls.createSecureContext({
-                        key: contextKey,
-                        cert: contextCert,
-                        ca: contextCA
-                    });
-                })
-            } catch(error) {
-                logger.safeError('error', 'HTTPS server secure contexts setup', error)
-                throw new Error(`HTTPS server secure contexts setup failed.`)
+                config.secureContext = tls.createSecureContext(secureContext)
+            } else {
+                logger.log('debug', `Secure server requested but vhost "${config.vhost.join(', ')}" has no secureContext entry, using default credentials.`)
             }
         }
 
-        return secureContexts
+        if(configErrors === true) {
+            throw new Error(`Errors while parsing Unnode.js server config file, exiting.`)
+        }
+
+        return config
     }
 
 

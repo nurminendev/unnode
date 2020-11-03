@@ -34,21 +34,21 @@
 
 
 /*
- * Express vhost middleware
+ * Express vhost router middleware
  *
  * Taken from https://github.com/panthershark/express-vhost
  * 
  * (c) Tommy Messbauer 
  *
  */
-class ExpressVhost {
+class ExpressVhostRouter {
     _hostDictionary = {}
 
     constructor() {
 
     }
 
-    vhost(trustProxy = false) {
+    middleware(trustProxy = false) {
         return (req, res, next) => {
             if(!req.headers.host) {
                 return next()
@@ -91,4 +91,4 @@ class ExpressVhost {
 }
 
 
-module.exports = new ExpressVhost
+module.exports = new ExpressVhostRouter
