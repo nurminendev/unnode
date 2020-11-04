@@ -121,34 +121,50 @@ class UnnodeWorker {
 
         let isCatchAllVhost = false
 
+        let vhostApp = this._serverApp
+
         if(vhosts.length === 1 && vhosts[0] === '*') {
             isCatchAllVhost = true
-        }
-
-        let vhostApp = null
-
-        if(!isCatchAllVhost) {
+        } else {
             vhostApp = express()
             vhostApp.use(helmet())
+        }
+
+        if(config.viewEngine) {
+            vhostApp.set('view engine', config.viewEngine)
+        }
+
+        if(config.viewsPath) {
+            vhostApp.set('views', config.viewsPath)
         }
 
         routes.forEach((route) => {
             const routeMethod   = route.method
             const routePath     = route.path
-            const routeModule   = route.controller.substr(0, route.controller.indexOf('#'))
-            const routeHandler  = route.controller.substring(route.controller.lastIndexOf('#') + 1)
+            const routeStatic   = route.static
+
+            // If this isn't a static route, then we must have a controller
+            const routeModule   = routeStatic ? null : route.controller.substr(0, route.controller.indexOf('#'))
+            const routeHandler  = routeStatic ? null : route.controller.substring(route.controller.lastIndexOf('#') + 1)
 
             const routeCustomParameter = route.customParameter || null
 
-            const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
 
-            if(isCatchAllVhost) {
-                this._serverApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+            if(routeStatic) {
+                vhostApp.use(routePath, express.static(routeStatic))
+
+                logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${vhosts.join(',')} ${routePath}, static file serve`)
             } else {
-                vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
-            }
+                try {
+                    const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
+                    vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+                    logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${vhosts.join(',')} ${routePath}, controller: ${route.controller}`)
+                } catch(e) {
+                    logger.log('error', `UnnodeWorker#setupServer: Failed to add route ${routeMethod} ${vhosts.join(',')} ${routePath}, controller: ${route.controller}: ${e.message}`)
+                    throw new Error(`Errors while setting up routes from Unnode.js server config file, exiting.`)
+                }
 
-            logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${vhosts.join(',')} ${routePath}, controller: ${route.controller}`)
+            }
         })
 
         if(!isCatchAllVhost) {
@@ -160,7 +176,7 @@ class UnnodeWorker {
 
 
     getWebBackend(host) {
-        return vhosts.getApp(host)
+        return vhostRouter.getApp(host)
     }
 
 
