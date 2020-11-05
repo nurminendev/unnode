@@ -1,4 +1,3 @@
-# Unnode.js
 <p align="center">
   <img src="https://i.imgur.com/lt1vd3A.png" alt="Unnode.js logo">
 </p>
@@ -9,13 +8,15 @@
 
 ![unnode-features](https://i.imgur.com/RQf1C1q.png)
 
-### Installation
-    npm install unnode
+## Installation
+```
+npm install unnode
+```
 
-### Getting started
+## Getting started
 See [Unnode.js documentation](https://www.unnodejs.org/doc/latest) and https://github.com/ricforge/unnodejs-hello-world
 
-### LICENSE
+## LICENSE
  
 The MIT License (MIT)
 
