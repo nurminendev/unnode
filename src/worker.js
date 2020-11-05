@@ -127,7 +127,7 @@ class UnnodeWorker {
             isCatchAllVhost = true
         } else {
             vhostApp = express()
-            vhostApp.use(helmet())
+            vhostApp.use(helmet(config.helmetOptions))
         }
 
         if(config.viewEngine) {
@@ -204,13 +204,13 @@ class UnnodeWorker {
         const portInsecure  = process.env.UNNODE_SERVER_INSECURE_PORT
         const portSecure    = process.env.UNNODE_SERVER_SECURE_PORT
 
-        if(portInsecure && !isNaN(portInsecure)) {
+        if(portInsecure && !isNaN(portInsecure) && portInsecure > 0) {
             await this._startHttpServer(listenHost, portInsecure)
         } else {
             logger.log('debug', 'UNNODE_SERVER_INSECURE_PORT not set or not a valid port number, skipping nonsecure HTTP server start.')
         }
 
-        if(portSecure && !isNaN(portSecure)) {
+        if(portSecure && !isNaN(portSecure) && portSecure > 0) {
             await this._startHttpSecureServer(listenHost, portSecure)
         }
 
