@@ -206,7 +206,10 @@ class UnnodeWorker {
     async runServer() {
         // Default to listening on all interfaces if not set in ENV
         const listenHost    = process.env.UNNODE_SERVER_LISTEN_HOST || '0.0.0.0'
-        const portInsecure  = process.env.UNNODE_SERVER_INSECURE_PORT
+
+        // Respect PORT env var, e.g. Heroku dynamic port number
+        const portInsecure  = process.env.PORT || process.env.UNNODE_SERVER_INSECURE_PORT
+
         const portSecure    = process.env.UNNODE_SERVER_SECURE_PORT
 
         if(portInsecure && !isNaN(portInsecure) && portInsecure > 0) {
