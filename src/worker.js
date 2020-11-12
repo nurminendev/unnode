@@ -40,6 +40,7 @@ const httpTerminator    = require('http-terminator')
 const express           = require('express')
 const helmet            = require('helmet')
 const chalk             = require('chalk')
+const favicon           = require('serve-favicon')
 
 const logger            = require('./logger.js').workerLogger
 const utils             = require('./utils.js')
@@ -138,6 +139,10 @@ class UnnodeWorker {
             vhostApp.set('views', config.viewsPath)
         }
 
+        if(config.serveFavicon) {
+            vhostApp.use(favicon(config.serveFavicon))
+        }
+
         routes.forEach((route) => {
             const routeMethod   = route.method
             const routePath     = route.path
@@ -153,7 +158,7 @@ class UnnodeWorker {
             if(routeStatic) {
                 vhostApp.use(routePath, express.static(routeStatic))
 
-                logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${vhosts.join(',')} ${routePath}, static file serve`)
+                logger.log('debug', `UnnodeWorker#setupServer: Added ${vhosts.join(',')} ${routePath}, static file serve`)
             } else {
                 try {
                     const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))

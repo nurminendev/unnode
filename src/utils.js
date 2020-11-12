@@ -36,6 +36,7 @@ const iso               = require('iso-3166-1')
 const node_fetch        = require('node-fetch')
 const AbortController   = require('abort-controller')
 const requestIp         = require('request-ip')
+const moment            = require('moment-timezone')
 
 
 // The Workhorse - Better async error handling
@@ -220,6 +221,20 @@ function getRequestFullUrl(req) {
 }
 
 
+function getCopyrightYears(startYearStr) {
+    const startYear = moment().year(startYearStr)
+    const timeNow   = moment()
+
+    let copyrightYearsStr = startYear.format('YYYY')
+
+    if(!startYear.isSame(timeNow, 'year')) {
+        copyrightYearsStr = startYear.format('YYYY') + '-' + timeNow.format('YYYY')
+    }
+
+    return copyrightYearsStr
+}
+
+
 module.exports = {
     handle: handle,
     isObject: isObject,
@@ -235,5 +250,6 @@ module.exports = {
     fetch: fetch,
     safeError: safeError,
     getClientIp: getClientIp,
-    getRequestFullUrl: getRequestFullUrl
+    getRequestFullUrl: getRequestFullUrl,
+    getCopyrightYears: getCopyrightYears
 }
