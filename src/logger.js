@@ -266,7 +266,11 @@ class MasterLogger {
                     break
             }
 
-            return `${timestamp} ${level}: ${message}`
+            if(process.env.UNNODE_DISABLE_TIMESTAMP_CONSOLE) {
+                return `${level}: ${message}`
+            } else {
+                return `${timestamp} ${level}: ${message}`
+            }
         })
 
         winston.loggers.add('consoleLogger', {
