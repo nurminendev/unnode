@@ -219,7 +219,6 @@ class UnnodeMaster {
 
                     this._webpackDevMiddleware = webpackDevMiddleware(webpackCompiler, {
                         publicPath: webpackConfig.output.publicPath,
-                        stats: 'minimal',
                         writeToDisk: true
                     })
 
