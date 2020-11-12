@@ -156,7 +156,7 @@ class UnnodeWorker {
 
 
             if(routeStatic) {
-                vhostApp.use(routePath, express.static(routeStatic))
+                vhostApp.use(routePath, express.static(routeStatic, { etag: false, lastModified: false, maxAge: '6 months' }))
 
                 logger.log('debug', `UnnodeWorker#setupServer: Added ${vhosts.join(',')} ${routePath}, static file serve`)
             } else {
