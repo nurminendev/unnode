@@ -166,7 +166,7 @@ class UnnodeWorker {
                     // Setup Cache-Control middleware if route has 'cacheControl' property
                     const routeCacheControl = route.cacheControl
                     if(routeCacheControl) {
-                        cacheMiddleware = cacheControl(routeCacheControl)
+                        const cacheMiddleware = cacheControl(routeCacheControl)
                         vhostApp[routeMethod.toLowerCase()](routePath, cacheMiddleware, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
                     } else {
                         vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
