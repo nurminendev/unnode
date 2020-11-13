@@ -41,6 +41,7 @@ const express           = require('express')
 const helmet            = require('helmet')
 const chalk             = require('chalk')
 const favicon           = require('serve-favicon')
+const cacheControl      = require('express-cache-controller')
 
 const logger            = require('./logger.js').workerLogger
 const utils             = require('./utils.js')
@@ -154,7 +155,6 @@ class UnnodeWorker {
 
             const routeCustomParameter = route.customParameter || null
 
-
             if(routeStatic) {
                 vhostApp.use(routePath, express.static(routeStatic, { etag: false, lastModified: false, maxAge: '16070400 sec' }))
 
@@ -162,8 +162,18 @@ class UnnodeWorker {
             } else {
                 try {
                     const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
-                    vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+        
+                    // Setup Cache-Control middleware if route has 'cacheControl' property
+                    const routeCacheControl = route.cacheControl
+                    if(routeCacheControl) {
+                        cacheMiddleware = cacheControl(routeCacheControl)
+                        vhostApp[routeMethod.toLowerCase()](routePath, cacheMiddleware, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+                    } else {
+                        vhostApp[routeMethod.toLowerCase()](routePath, routeHandlerObject[routeHandler].bind(routeHandlerObject, routeCustomParameter))
+                    }
+        
                     logger.log('debug', `UnnodeWorker#setupServer: Added ${routeMethod} ${vhosts.join(',')} ${routePath}, controller: ${route.controller}`)
+        
                 } catch(e) {
                     logger.log('error', `UnnodeWorker#setupServer: Failed to add route ${routeMethod} ${vhosts.join(',')} ${routePath}, controller: ${route.controller}: ${e.message}`)
                     throw new Error(`Errors while setting up routes from Unnode.js server config file, exiting.`)
