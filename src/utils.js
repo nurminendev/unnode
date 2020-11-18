@@ -215,9 +215,10 @@ function getClientIp(req) {
 }
 
 
-function getRequestFullUrl(req) {
+function getRequestFullUrl(req, removeQuery = false) {
     const protocol = req.headers["x-forwarded-proto"] || req.protocol
-    return protocol + '://' + req.get('host') + req.originalUrl
+    const url = removeQuery ? req.originalUrl.split("?").shift() : req.originalUrl
+    return protocol + '://' + req.get('host') + url
 }
 
 
