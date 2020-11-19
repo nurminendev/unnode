@@ -143,7 +143,7 @@ class UnnodeWorker {
         if(config.robotsTxt) {
             vhostApp.get('/robots.txt', (req, res) => {
                 res.type('text/plain')
-                res.send("User-agent: *\nDisallow: /")
+                res.send(config.robotsTxt)
             })
         }
 
