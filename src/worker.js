@@ -42,6 +42,7 @@ const helmet            = require('helmet')
 const chalk             = require('chalk')
 const favicon           = require('serve-favicon')
 const cacheControl      = require('express-cache-controller')
+const expressRobots     = require('express-robots-txt')
 
 const logger            = require('./logger.js').workerLogger
 const utils             = require('./utils.js')
@@ -138,6 +139,10 @@ class UnnodeWorker {
 
         if(config.viewsPath) {
             vhostApp.set('views', config.viewsPath)
+        }
+
+        if(config.robotsTxt) {
+            vhostApp.use(expressRobots(config.robotsTxt))
         }
 
         if(config.serveFavicon) {
