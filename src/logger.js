@@ -191,7 +191,7 @@ class MasterLogger {
         const logFileRotate = `${logFile}-%DATE%`
         const symlinkFile   = logFile
 
-        const fileRotateTransport = new (winston.transports.DailyRotateFile)({
+        const fileRotateTransport = new winston.transports.DailyRotateFile({
             level: 'debug',
             filename: logFileRotate,
             dirname: logDir,
