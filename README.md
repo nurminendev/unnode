@@ -2,7 +2,7 @@
   <img src="https://i.imgur.com/lt1vd3A.png" alt="Unnode.js logo">
 </p>
 
-**Unnode.js** is a framework that makes creating Node.js back ends easy. It provides you with  process clustering,  proper logging,  web backend abstraction and  vhosts with per-vhost TLS. It's small, simple and doesn't force you into a strict framework-structure; you can still organize your project as you like.
+**Unnode.js** is a framework that makes creating Node.js back ends easy. It provides you with **process clustering**, **proper logging**, **web backend abstraction** and **vhosts** (domain-based routing). It's small, simple and doesn't force you into a strict framework-structure; you can still organize your project as you like.
 
 **It is** a  *bare-bones framework for creating hand-crafted custom back ends where speed and precision are of the essence*.
 
