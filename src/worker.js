@@ -205,7 +205,7 @@ class UnnodeWorker {
 
     addWildcardRoute() {
         // Default endpoint for everything else
-        this._serverApp.use((req, res) => {
+        this._serverApp.use(helmet(), (req, res) => {
             const ip     = utils.getClientIp(req)
             const method = req.method
             const url    = utils.getRequestFullUrl(req)
