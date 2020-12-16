@@ -64,7 +64,7 @@ class UnnodeMaster {
             workers = cpuCount
         }
 
-        this._numWorkers = workers
+        this._numWorkers = parseInt(workers)
 
         masterLogger.log('info', `Detected ${cpuCount} CPUs, using ${workers}`)
         masterLogger.log('info', '')
@@ -76,17 +76,26 @@ class UnnodeMaster {
 
         const shutdownSignals = ['SIGINT', 'SIGTERM']
 
+        let shutdownSignalReceived = false
+
         shutdownSignals.forEach(signal => {
             process.on(signal, () => {
-                masterLogger.log('info', `Received ${signal}, shutting down workers`)
-                this._shutdownWorkers()
+                if(shutdownSignalReceived === false) {
+                    shutdownSignalReceived = true
+                    masterLogger.log('info', `Received ${signal}, shutting down workers`)
+                    this._shutdownWorkers()
+                }
             })
         })
 
         // SIGUSR2: Restart all workers / code hot-reload
         process.on('SIGUSR2', () => {
-            masterLogger.log('info', 'Received SIGUSR2, restarting workers')
-            this._restartWorkers()
+            // _restartWorkers() immediately sets this._firstInitDone = false
+            // so use that as a spam-protection flag
+            if(this._firstInitDone === true) {
+                masterLogger.log('info', 'Received SIGUSR2, restarting workers')
+                this._restartWorkers()
+            }
         })
 
         await this._startWebpackWatcher(serverDir)
@@ -124,8 +133,8 @@ class UnnodeMaster {
 
 
     async _workerExit(worker, code, signal) {
-        if(code === 0 || !this._firstInitDone) {
-            // Normal worker process exit OR a crash during startup = no restart
+        if(code === 0 || !this._firstInitDone || signal === 'SIGTERM' || signal === 'SIGINT') {
+            // Normal worker process, crash during startup, or SIGINT/TERM = no restart
             masterLogger.log(
                 'info',
                 'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`)
@@ -162,7 +171,7 @@ class UnnodeMaster {
                 if (!this._firstInitDone) {
                     this._numWorkersReady++
 
-                    if (this._numWorkersReady === Object.entries(cluster.workers).length) {
+                    if (this._numWorkersReady === this._numWorkers) {
                         masterLogger.log('info', '')
                         masterLogger.log('info', `All workers online (${this._numWorkers})`)
                         if (message.listen_port_insecure !== null) {
