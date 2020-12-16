@@ -129,8 +129,9 @@ class UnnodeWorker {
             isCatchAllVhost = true
         } else {
             vhostApp = express()
-            vhostApp.use(helmet(config.helmetOptions))
         }
+
+        vhostApp.use(helmet(config.helmetOptions))
 
         if(config.viewEngine) {
             vhostApp.set('view engine', config.viewEngine)
