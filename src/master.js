@@ -41,7 +41,10 @@ const utils             = require('./utils.js')
 
 
 class UnnodeMaster {
-    _webpackDevMiddleware = null
+    _firstInitDone          = false
+    _numWorkers             = 0
+    _numWorkersReady        = 0
+    _webpackDevMiddleware   = null
 
 
     constructor() {
@@ -53,6 +56,7 @@ class UnnodeMaster {
         masterLogger.init(serverDir)
 
         const cpuCount = require('os').cpus().length
+
         let workers = process.env.UNNODE_WORKERS
 
         // UNNODE_WORKERS must be >=1 and <= CPU count, else default to CPU count
@@ -60,127 +64,32 @@ class UnnodeMaster {
             workers = cpuCount
         }
 
+        this._numWorkers = workers
+
         masterLogger.log('info', `Detected ${cpuCount} CPUs, using ${workers}`)
         masterLogger.log('info', '')
 
-        cluster.on('online', (worker) => {
-            masterLogger.log('info', 'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`) + ' online')
-        })
+        cluster.on('online',     this._workerOnline.bind(this))
+        cluster.on('message',    this._messageFromWorker.bind(this))
+        cluster.on('disconnect', this._workerDisconnect.bind(this))
+        cluster.on('exit',       this._workerExit.bind(this))
 
+        const shutdownSignals = ['SIGINT', 'SIGTERM']
 
-        let numWorkersReady = 0
-        let firstInitDone = false
-
-        // Setup message handlers
-        cluster.on('message', (worker, message) => {
-            if (!utils.isObject(message)) {
-                return
-            }
-
-            switch (message.type) {
-                case 'log':
-                    masterLogger.log(message.level, message.message, message.overrideRollbar)
-                    break
-                case 'shutdown':
-                    worker.disconnect()
-                    break
-                case 'serverRunning':
-                    if (!firstInitDone) {
-                        numWorkersReady++
-
-                        if (numWorkersReady === Object.entries(cluster.workers).length) {
-                            masterLogger.log('info', '')
-                            masterLogger.log('info', `All workers online (${workers})`)
-                            if (message.listen_port_insecure !== null) {
-                                masterLogger.log('info', `Express server listening on ${message.listen_host}:${message.listen_port_insecure} (HTTP)`)
-                            }
-                            if (message.listen_port_secure !== null) {
-                                masterLogger.log('info', `Express server listening on ${message.listen_host}:${message.listen_port_secure} (HTTPS)`)
-                            }
-                            masterLogger.log('info', '')
-
-                            firstInitDone = true
-                        }
-                    }
-                case 'pingConsole':
-                    const pingIfNoActivityInSeconds = (60 * 60) * 2
-                    masterLogger.pingConsole(pingIfNoActivityInSeconds)
-                    break
-                default:
-                    break
-
-            }
-        })
-
-        cluster.on('disconnect', (worker) => {
-            masterLogger.log('debug', chalk.bgRed(`[${worker.process.pid}]`) + ' IPC channel disconnected.')
-        })
-
-        cluster.on('exit', async (worker, code, signal) => {
-            if (code === 0) {
-                // Normal worker process exit
-                masterLogger.log('info', 'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`) + ' exited normally.')
-                if(Object.entries(cluster.workers).length === 0) {
-                    // Close webpack watcher if all workers exited
-                    await this._closeWebpackWatcher()
-                }
-            } else {
-                // Abnormal exit, restart worker
-                masterLogger.log('alert', 'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`) + ` died abnormally (code: ${code}, signal: ${signal}), forking new...`)
-                cluster.fork()
-            }
-        })
-
-
-        // Signal handlers
-        process.on('SIGINT', () => {
-            masterLogger.log('info', 'Received SIGINT, shutting down workers')
-            for (const id in cluster.workers) {
-                // Send a shutdown request to worker, worker will then gracefully close down
-                // and request a disconnect
-                cluster.workers[id].send('shutdown')
-            }
-        })
-
-        process.on('SIGTERM', () => {
-            masterLogger.log('info', 'Received SIGTERM, shutting down workers')
-            for (const id in cluster.workers) {
-                // Send a shutdown request to worker, worker will then gracefully close down
-                // and request a disconnect
-                cluster.workers[id].send('shutdown')
-            }
-        })
-
-        // HOT RELOAD
-        process.on('SIGUSR2', () => {
-            masterLogger.log('info', 'Received SIGUSR2, restarting workers')
-
-            numWorkersReady = 0
-            firstInitDone = false
-
-            let wid
-            const workerIds = []
-
-            for (wid in cluster.workers) {
-                workerIds.push(wid);
-            }
-
-            workerIds.forEach((wid) => {
-                cluster.workers[wid].send('shutdown')
-
-                setTimeout(() => {
-                    if (cluster.workers[wid]) {
-                        cluster.workers[wid].kill('SIGKILL')
-                    }
-                }, 6000) // http-terminator grace perioid is 5 seconds, set this to 6
-
-                cluster.fork()
+        shutdownSignals.forEach(signal => {
+            process.on(signal, () => {
+                masterLogger.log('info', `Received ${signal}, shutting down workers`)
+                this._shutdownWorkers()
             })
         })
 
+        // SIGUSR2: Restart all workers / code hot-reload
+        process.on('SIGUSR2', () => {
+            masterLogger.log('info', 'Received SIGUSR2, restarting workers')
+            this._restartWorkers()
+        })
 
         await this._startWebpackWatcher(serverDir)
-
 
         // Fire up workers
         for (let i = 0; i < workers; i++) {
@@ -189,6 +98,146 @@ class UnnodeMaster {
 
     }
 
+
+
+    /********************************************************************
+    *********************************************************************
+
+     ██████╗██╗     ██╗   ██╗███████╗████████╗███████╗██████╗ 
+    ██╔════╝██║     ██║   ██║██╔════╝╚══██╔══╝██╔════╝██╔══██╗
+    ██║     ██║     ██║   ██║███████╗   ██║   █████╗  ██████╔╝
+    ██║     ██║     ██║   ██║╚════██║   ██║   ██╔══╝  ██╔══██╗
+    ╚██████╗███████╗╚██████╔╝███████║   ██║   ███████╗██║  ██║
+     ╚═════╝╚══════╝ ╚═════╝ ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+
+    *********************************************************************
+    ********************************************************************/
+
+    _workerOnline(worker) {
+        masterLogger.log('info', 'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`) + ' online')
+    }
+
+
+    _workerDisconnect(worker) {
+        masterLogger.log('debug', chalk.bgRed(`[${worker.process.pid}]`) + ' IPC channel disconnected.')
+    }
+
+
+    async _workerExit(worker, code, signal) {
+        if(code === 0 || !this._firstInitDone) {
+            // Normal worker process exit OR a crash during startup = no restart
+            masterLogger.log(
+                'info',
+                'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`)
+                    + ` exited (code: ${code}, signal: ${signal})`
+            )
+            if(Object.entries(cluster.workers).length === 0) {
+                // Close webpack watcher
+                await this._closeWebpackWatcher()
+            }
+        } else {
+            // Abnormal exit, restart worker
+            masterLogger.log(
+                'alert',
+                'Worker process ' + chalk.bgRed(`[${worker.process.pid}]`)
+                    + ` died abnormally (code: ${code}, signal: ${signal}), forking new...`)
+            cluster.fork()
+        }
+    }
+
+
+    _messageFromWorker(worker, message) {
+        if (!utils.isObject(message)) {
+            return
+        }
+
+        switch (message.type) {
+            case 'log':
+                masterLogger.log(message.level, message.message, message.overrideRollbar)
+                break
+            case 'shutdown':
+                worker.disconnect()
+                break
+            case 'serverRunning':
+                if (!this._firstInitDone) {
+                    this._numWorkersReady++
+
+                    if (this._numWorkersReady === Object.entries(cluster.workers).length) {
+                        masterLogger.log('info', '')
+                        masterLogger.log('info', `All workers online (${this._numWorkers})`)
+                        if (message.listen_port_insecure !== null) {
+                            masterLogger.log('info', `Express server listening on ${message.listen_host}:${message.listen_port_insecure} (HTTP)`)
+                        }
+                        if (message.listen_port_secure !== null) {
+                            masterLogger.log('info', `Express server listening on ${message.listen_host}:${message.listen_port_secure} (HTTPS)`)
+                        }
+                        masterLogger.log('info', '')
+
+                        this._firstInitDone = true
+                    }
+                }
+            case 'pingConsole':
+                const pingIfNoActivityInSeconds = (60 * 60) * 2
+                masterLogger.pingConsole(pingIfNoActivityInSeconds)
+                break
+            default:
+                break
+
+        }
+    }
+
+
+    _shutdownWorkers() {
+        for (const id in cluster.workers) {
+            // Send a shutdown request to worker, worker will then gracefully close down
+            // and request a disconnect
+            cluster.workers[id].send('shutdown')
+        }
+    }
+
+
+    _restartWorkers() {
+        this._numWorkersReady   = 0
+        this._firstInitDone     = false
+
+        let wid
+        const workerIds = []
+
+        for (wid in cluster.workers) {
+            workerIds.push(wid)
+        }
+
+        workerIds.forEach((wid) => {
+            cluster.workers[wid].send('shutdown')
+
+            // Forcefully kill a process after a certain time if it hasn't
+            // gracefully exited
+            setTimeout(() => {
+                if (cluster.workers[wid]) {
+                    cluster.workers[wid].kill('SIGKILL')
+                }
+            }, 6000) // Make sure this is higher than http-terminator grace perioid
+                     // in worker.js
+
+            // We can already spawn new processes while the old ones are exiting
+            cluster.fork()
+        })
+    }
+
+
+
+    /********************************************************************
+    *********************************************************************
+
+    ██╗    ██╗███████╗██████╗ ██████╗  █████╗  ██████╗██╗  ██╗
+    ██║    ██║██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██║ ██╔╝
+    ██║ █╗ ██║█████╗  ██████╔╝██████╔╝███████║██║     █████╔╝
+    ██║███╗██║██╔══╝  ██╔══██╗██╔═══╝ ██╔══██║██║     ██╔═██╗
+    ╚███╔███╔╝███████╗██████╔╝██║     ██║  ██║╚██████╗██║  ██╗
+     ╚══╝╚══╝ ╚══════╝╚═════╝ ╚═╝     ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+
+    *********************************************************************
+    ********************************************************************/
 
     _startWebpackWatcher(serverDir) {
         return new Promise((resolve, reject) => {
