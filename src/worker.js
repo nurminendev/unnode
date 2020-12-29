@@ -203,21 +203,23 @@ class UnnodeWorker {
     }
 
 
-    addWildcardRoute() {
+    addWildcardRoute(logIt = true) {
         // Default endpoint for everything else
         this._serverApp.use(helmet(), (req, res) => {
-            const ip     = utils.getClientIp(req)
-            const method = req.method
-            const url    = utils.getRequestFullUrl(req)
-            const agent  = req.get('user-agent')
-
-            logger.log('notice', `Wildcard request ${method} ${url} (from: ${ip}, User-Agent: ${agent})`, 'no-rollbar')
+            if(logIt === true) {
+                const ip     = utils.getClientIp(req)
+                const method = req.method
+                const url    = utils.getRequestFullUrl(req)
+                const agent  = req.get('user-agent')
+    
+                logger.log('notice', `Wildcard request ${method} ${url} (from: ${ip}, User-Agent: ${agent})`, 'no-rollbar')
+            }
 
             // Set shortcut icon to empty so browsers stop requesting it
             res.status(404).send('<html><head><title>404 Not Found</title><link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon"></head><body><h1>404 Not Found</h1></body></html>')
         })
 
-        logger.log('debug', `UnnodeWorker#addWildCardRoute: Added wildcard route handler (404 reply + request logging)`)
+        logger.log('debug', `UnnodeWorker#addWildCardRoute: Added wildcard route handler`)
     }
 
 
