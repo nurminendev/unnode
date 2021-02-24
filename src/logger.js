@@ -2,11 +2,11 @@
 //
 // Unnode.js - A Node.js back end framework
 //
-// https://www.unnodejs.org
+// https://unnodejs.org
 //
-// Copyright (c) 2020 RicForge - https://www.ricforge.com
+// Copyright (c) 2020, 2021 RicForge - https://ricforge.com
 //
-// RicForge is a Nurminen Development organization - https://www.nurminen.dev
+// RicForge is a Nurminen Development Oy Ltd organization - https://nurminen.dev
 //
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
