@@ -286,7 +286,7 @@ class UnnodeMaster {
 
             return true
         } else {
-            resolve(true)
+            return true
         }
     }
 
