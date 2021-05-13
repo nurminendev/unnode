@@ -30,15 +30,14 @@
 //
 
 
-const fs            = require('fs')
-const path          = require('path')
-
-const winston       = require('winston')
-const winstonRotate = require('winston-daily-rotate-file')
-const chalk         = require('chalk')
-const stripAnsi     = require('strip-ansi')
-const Rollbar       = require('rollbar')
-const moment        = require('moment-timezone')
+import fs            from 'fs'
+import path          from 'path'
+import winston       from 'winston'
+import winstonRotate from 'winston-daily-rotate-file'
+import chalk         from 'chalk'
+import stripAnsi     from 'strip-ansi'
+import Rollbar       from 'rollbar'
+import moment        from 'moment-timezone'
 
 
 /*
@@ -374,7 +373,5 @@ class WorkerLogger {
 }
 
 
-module.exports = {
-    masterLogger: new MasterLogger(),
-    workerLogger: new WorkerLogger()
-}
+export const masterLogger = new MasterLogger()
+export const workerLogger = new WorkerLogger()

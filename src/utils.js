@@ -30,13 +30,13 @@
 //
 
 
-const fs                = require('fs')
-const R                 = require('ramda')
-const iso               = require('iso-3166-1')
-const node_fetch        = require('node-fetch')
-const AbortController   = require('abort-controller')
-const requestIp         = require('request-ip')
-const moment            = require('moment-timezone')
+import fs                from 'fs'
+import R                 from 'ramda'
+import iso               from 'iso-3166-1'
+import node_fetch        from 'node-fetch'
+import AbortController   from 'abort-controller'
+import requestIp         from 'request-ip'
+import moment            from 'moment-timezone'
 
 
 // The Workhorse - Better async error handling
@@ -236,21 +236,21 @@ function getCopyrightYears(startYearStr) {
 }
 
 
-module.exports = {
-    handle: handle,
-    isObject: isObject,
-    isFileReadable: isFileReadable,
-    isFileReadableSync: isFileReadableSync,
-    readFile: readFile,
-    readFileSync: readFileSync,
-    getDirectories: getDirectories,
-    _v: _v,
-    parseJson: parseJson,
-    convertCountryCodeAlpha2toAlpha3: convertCountryCodeAlpha2toAlpha3,
-    convertCountryCodeAlpha3toAlpha2: convertCountryCodeAlpha3toAlpha2,
-    fetch: fetch,
-    safeError: safeError,
-    getClientIp: getClientIp,
-    getRequestFullUrl: getRequestFullUrl,
-    getCopyrightYears: getCopyrightYears
+export {
+    handle,
+    isObject,
+    isFileReadable,
+    isFileReadableSync,
+    readFile,
+    readFileSync,
+    getDirectories,
+    _v,
+    parseJson,
+    convertCountryCodeAlpha2toAlpha3,
+    convertCountryCodeAlpha3toAlpha2,
+    fetch,
+    safeError,
+    getClientIp,
+    getRequestFullUrl,
+    getCopyrightYears
 }

@@ -32,12 +32,12 @@
 
 'use strict'
 
-const path              = require('path')
-const cluster           = require('cluster')
-const chalk             = require('chalk')
+import path                 from 'node:path'
+import cluster              from 'node:cluster'
+import chalk                from 'chalk'
 
-const masterLogger      = require('./logger.js').masterLogger
-const utils             = require('./utils.js')
+import { masterLogger }     from './logger.js'
+import * as utils           from './utils.js'
 
 
 class UnnodeMaster {
@@ -55,7 +55,7 @@ class UnnodeMaster {
     async init(serverDir) {
         masterLogger.init(serverDir)
 
-        const cpuCount = require('os').cpus().length
+        const cpuCount = (await import('node:os')).cpus().length
 
         let workers = process.env.UNNODE_WORKERS
 
@@ -248,46 +248,46 @@ class UnnodeMaster {
     *********************************************************************
     ********************************************************************/
 
-    _startWebpackWatcher(serverDir) {
-        return new Promise((resolve, reject) => {
-            if(process.env.NODE_ENV !== 'production') {
-                const webpackConfigPath     = process.env.UNNODE_WEBPACK_DEV_CONFIG
-                let webpackConfigFullPath   = null
-        
-                if(typeof webpackConfigPath === 'string' && webpackConfigPath.length > 0) {
-                    webpackConfigFullPath = path.join(serverDir, 'config', webpackConfigPath)
-                }
-
-                if(webpackConfigFullPath === null) {
-                    return resolve(true)
-                }
-
-                const isWebpackConfigReadable = utils.isFileReadableSync(webpackConfigFullPath)
-        
-                if(webpackConfigFullPath !== null && isWebpackConfigReadable === false) {
-                    return reject(new Error(`UNNODE_WEBPACK_DEV_CONFIG is not readable: ${webpackConfigFullPath}`))
-                }
-        
-                if(isWebpackConfigReadable === true) {
-                    const webpack               = require('webpack')
-                    const webpackDevMiddleware  = require('webpack-dev-middleware')
-                    const webpackConfig         = require(webpackConfigFullPath)
+    async _startWebpackWatcher(serverDir) {
+        if(process.env.NODE_ENV !== 'production') {
+            const webpackConfigPath     = process.env.UNNODE_WEBPACK_DEV_CONFIG
+            let webpackConfigFullPath   = null
     
-                    const webpackCompiler = webpack(webpackConfig)
-
-                    this._webpackDevMiddleware = webpackDevMiddleware(webpackCompiler, {
-                        publicPath: webpackConfig.output.publicPath,
-                        writeToDisk: true
-                    })
-
-                    this._webpackDevMiddleware.waitUntilValid(() => {
-                        resolve(true)
-                    })
-                }
-            } else {
-                resolve(true)
+            if(typeof webpackConfigPath === 'string' && webpackConfigPath.length > 0) {
+                webpackConfigFullPath = path.join(serverDir, 'config', webpackConfigPath)
             }
-        })
+
+            if(webpackConfigFullPath === null) {
+                return true
+            }
+
+            const isWebpackConfigReadable = utils.isFileReadableSync(webpackConfigFullPath)
+    
+            if(webpackConfigFullPath !== null && isWebpackConfigReadable === false) {
+                throw new Error(`UNNODE_WEBPACK_DEV_CONFIG is not readable: ${webpackConfigFullPath}`)
+            }
+    
+            const webpack               = (await import('webpack')).default
+            const webpackDevMiddleware  = (await import('webpack-dev-middleware')).default
+            const webpackConfig         = (await import(webpackConfigFullPath)).default
+
+            const webpackCompiler = webpack(webpackConfig)
+
+            this._webpackDevMiddleware = webpackDevMiddleware(webpackCompiler, {
+                publicPath: webpackConfig.output.publicPath,
+                writeToDisk: true
+            })
+
+            await new Promise((resolve, reject) => {
+                this._webpackDevMiddleware.waitUntilValid(() => {
+                    resolve()
+                })
+            })
+
+            return true
+        } else {
+            resolve(true)
+        }
     }
 
 
@@ -307,4 +307,4 @@ class UnnodeMaster {
 }
 
 
-module.exports = new UnnodeMaster()
+export default new UnnodeMaster()

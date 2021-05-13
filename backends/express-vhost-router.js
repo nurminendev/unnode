@@ -91,4 +91,4 @@ class ExpressVhostRouter {
 }
 
 
-module.exports = new ExpressVhostRouter
+export default new ExpressVhostRouter()
