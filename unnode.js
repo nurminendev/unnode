@@ -30,20 +30,24 @@
 //
 
 
-const cluster = require('cluster')
+import cluster  from 'cluster'
+
+import unnodeMaster from './src/master.js'
+import unnodeWorker from './src/worker.js'
+
+import { masterLogger as unnodeMasterLogger } from './src/logger.js'
+import { workerLogger as unnodeWorkerLogger } from './src/logger.js'
+
+import * as unnodeUtils from './src/utils.js'
 
 
-module.exports = {
+export const master = cluster.isMaster ? unnodeMaster : null
+export const worker = cluster.isWorker ? unnodeWorker : null
 
-    'master':       cluster.isMaster ? require('./src/master.js') : null,
-    'worker':       cluster.isWorker ? require('./src/worker.js') : null,
+export const masterLogger = cluster.isMaster ? unnodeMasterLogger : null
+export const workerLogger = cluster.isWorker ? unnodeWorkerLogger : null
 
-    'masterLogger': cluster.isMaster ? require('./src/logger.js').masterLogger : null,
-    'workerLogger': cluster.isWorker ? require('./src/logger.js').workerLogger : null,
+export const isMaster = cluster.isMaster
+export const isWorker = cluster.isWorker
 
-    'isMaster':     cluster.isMaster,
-    'isWorker':     cluster.isWorker,
-
-    'utils':        require('./src/utils.js')
-
-}
+export const utils = unnodeUtils

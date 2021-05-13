@@ -30,24 +30,23 @@
 //
 
 
-'use strict'
+import path                         from 'path'
+import tls                          from 'tls'
+import http                         from 'http'
+import https                        from 'https'
+import httpTerminator               from 'http-terminator'
+import express                      from 'express'
+import helmet                       from 'helmet'
+import chalk                        from 'chalk'
+import favicon                      from 'serve-favicon'
+import cacheControl                 from 'express-cache-controller'
 
-const path              = require('path')
-const tls               = require('tls')
-const http              = require('http')
-const https             = require('https')
-const httpTerminator    = require('http-terminator')
-const express           = require('express')
-const helmet            = require('helmet')
-const chalk             = require('chalk')
-const favicon           = require('serve-favicon')
-const cacheControl      = require('express-cache-controller')
+import { workerLogger as logger }   from './logger.js'
+import * as utils                   from './utils.js'
 
-const logger            = require('./logger.js').workerLogger
-const utils             = require('./utils.js')
-const { handle }        = require('./utils.js')
+import vhostRouter                  from '../backends/express-vhost-router.js'
 
-const vhostRouter       = require('../backends/express-vhost-router.js')
+const handle = utils.handle
 
 
 class UnnodeWorker {
@@ -103,11 +102,11 @@ class UnnodeWorker {
         const configPath = process.env.UNNODE_SERVER_CONFIG || defaultConfigPath
 
         // Parse server config, vhosts, routes etc
-        this._serverConfig = this._parseServerConfig(configPath)
+        this._serverConfig = await this._parseServerConfig(configPath)
 
-        this._serverConfig.forEach((config) => {
-            this._setupServerVhost(config, serverDir)
-        })
+        for(const config of this._serverConfig) {
+            await this._setupServerVhost(config, serverDir)
+        }
 
         this._pingInterval = setInterval(() => {
             process.send({ 'type': 'pingConsole' })
@@ -117,7 +116,7 @@ class UnnodeWorker {
     }
 
 
-    _setupServerVhost(config, serverDir) {
+    async _setupServerVhost(config, serverDir) {
         const vhosts = config.vhost
         const routes = config.routes
 
@@ -152,7 +151,7 @@ class UnnodeWorker {
             vhostApp.use(favicon(config.serveFavicon))
         }
 
-        routes.forEach((route) => {
+        for(const route of routes) {
             const routeMethod   = route.method
             const routePath     = route.path
             const routeStatic   = route.static
@@ -169,7 +168,7 @@ class UnnodeWorker {
                 logger.log('debug', `UnnodeWorker#setupServer: Added ${vhosts.join(',')} ${routePath}, static file serve`)
             } else {
                 try {
-                    const routeHandlerObject = require(path.join(serverDir, 'controllers', `${routeModule}.js`))
+                    const routeHandlerObject = (await import(path.join(serverDir, 'controllers', `${routeModule}.js`))).default
         
                     // Setup Cache-Control middleware if route has 'cacheControl' property
                     const routeCacheControl = route.cacheControl
@@ -188,7 +187,7 @@ class UnnodeWorker {
                 }
 
             }
-        })
+        }
 
         if(!isCatchAllVhost) {
             vhosts.map((vhost) => {{
@@ -365,9 +364,9 @@ class UnnodeWorker {
     }
 
 
-    _parseServerConfig(configFilePath) {
+    async _parseServerConfig(configFilePath) {
         try {
-            const serverConfig = require(configFilePath)
+            const serverConfig = (await import(configFilePath)).default
 
             if(!Array.isArray(serverConfig)) {
                 throw new Error(`Unnode.js server config file did not export an array`)
@@ -542,4 +541,4 @@ class UnnodeWorker {
 }
 
 
-module.exports = new UnnodeWorker()
+export default new UnnodeWorker()
