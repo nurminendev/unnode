@@ -31,7 +31,7 @@
 
 
 import fs                from 'fs'
-import R                 from 'ramda'
+import * as R            from 'ramda'
 import iso               from 'iso-3166-1'
 import node_fetch        from 'node-fetch'
 import AbortController   from 'abort-controller'
