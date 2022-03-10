@@ -39,7 +39,7 @@
         "backends/**/*.js"
     ],
     "engines": {
-        "node": ">=14.14.0 <15",
+        "node": ">=16.14.0 <17",
         "npm": ">=7"
     },
     "keywords": [
