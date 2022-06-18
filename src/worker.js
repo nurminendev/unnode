@@ -37,6 +37,7 @@ import https                        from 'https'
 import httpTerminator               from 'http-terminator'
 import express                      from 'express'
 import helmet                       from 'helmet'
+import cors                         from 'cors'
 import chalk                        from 'chalk'
 import favicon                      from 'serve-favicon'
 import cacheControl                 from 'express-cache-controller'
@@ -129,6 +130,8 @@ class UnnodeWorker {
         } else {
             vhostApp = express()
         }
+
+        vhostApp.use(cors())
 
         vhostApp.use(helmet(config.helmetOptions))
 
