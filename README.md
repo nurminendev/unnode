@@ -1,3 +1,7 @@
+# DEPRECATED PROJECT
+
+**This codebase is no longer maintained**
+
 <p align="center">
   <img src="https://i.imgur.com/lt1vd3A.png" alt="Unnode.js logo">
 </p>
